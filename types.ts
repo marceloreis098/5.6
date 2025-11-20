@@ -1,3 +1,4 @@
+
 // types.ts
 
 export type Page = 'Dashboard' | 'Inventário de Equipamentos' | 'Controle de Licenças' | 'Usuários e Permissões' | 'Configurações' | 'Auditoria';
@@ -115,4 +116,6 @@ export interface AppSettings {
     termo_devolucao_template?: string;
     hasInitialConsolidationRun?: boolean;
     lastAbsoluteUpdateTimestamp?: string;
+    appTitle?: string;
+    appLogo?: string;
 }

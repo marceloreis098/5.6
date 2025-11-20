@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -23,6 +24,10 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [companyName, setCompanyName] = useState('MRR INFORMATICA');
   const [isSsoEnabled, setIsSsoEnabled] = useState(false);
+  
+  // White Label States
+  const [appTitle, setAppTitle] = useState('Inventário Pro');
+  const [appLogo, setAppLogo] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('currentUser');
@@ -46,6 +51,8 @@ const App: React.FC = () => {
             const settings = await getSettings();
             setCompanyName(settings.companyName || 'MRR INFORMATICA');
             setIsSsoEnabled(settings.isSsoEnabled || false);
+            if (settings.appTitle) setAppTitle(settings.appTitle);
+            if (settings.appLogo) setAppLogo(settings.appLogo);
         } catch (error) {
             console.error("Failed to fetch settings:", error);
         }
@@ -95,6 +102,12 @@ const App: React.FC = () => {
     setCurrentUser(updatedUser);
     localStorage.setItem('currentUser', JSON.stringify(updatedUser));
   };
+  
+  // Update local app state when settings change
+  const handleSettingsUpdate = (newTitle?: string, newLogo?: string) => {
+      if (newTitle) setAppTitle(newTitle);
+      if (newLogo !== undefined) setAppLogo(newLogo);
+  }
 
   const toggleTheme = () => {
     setIsDarkMode(prev => {
@@ -140,7 +153,7 @@ const App: React.FC = () => {
       case 'Auditoria':
         return <AuditLog />;
       case 'Configurações':
-        return <Settings currentUser={currentUser} onUserUpdate={handleUserUpdate}/>;
+        return <Settings currentUser={currentUser} onUserUpdate={handleUserUpdate} onSettingsUpdate={handleSettingsUpdate} />;
       default:
         return <Dashboard setActivePage={setActivePage} currentUser={currentUser} />;
     }
@@ -155,7 +168,7 @@ const App: React.FC = () => {
   }
 
   if (!currentUser) {
-    return <Login onLoginSuccess={handleLoginSuccess} isSsoEnabled={isSsoEnabled} />;
+    return <Login onLoginSuccess={handleLoginSuccess} isSsoEnabled={isSsoEnabled} appTitle={appTitle} appLogo={appLogo} />;
   }
 
   return (
@@ -166,6 +179,8 @@ const App: React.FC = () => {
         pages={pages}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
+        appTitle={appTitle}
+        appLogo={appLogo}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header

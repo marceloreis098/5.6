@@ -1,15 +1,16 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { User, UserRole, AppSettings, License } from '../types';
 import Icon from './common/Icon';
 import { getSettings, saveSettings, checkApiStatus, checkDatabaseBackupStatus, backupDatabase, restoreDatabase, clearDatabase, getLicenseTotals, getLicenses } from '../services/apiService';
 import DataConsolidation from './DataConsolidation';
-import LicenseImport from './LicenseImport'; // Novo import
+import LicenseImport from './LicenseImport';
 import PeriodicUpdate from './PeriodicUpdate';
 
 interface SettingsProps {
     currentUser: User;
     onUserUpdate: (updatedUser: User) => void;
+    onSettingsUpdate?: (newTitle?: string, newLogo?: string) => void;
 }
 
 const DEFAULT_ENTREGA_TEMPLATE = `
@@ -105,12 +106,14 @@ const SettingsToggle: React.FC<{
 );
 
 
-const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
+const Settings: React.FC<SettingsProps> = ({ currentUser, onSettingsUpdate }) => {
     const [settings, setSettings] = useState<Partial<AppSettings>>({
         isSsoEnabled: false,
         is2faEnabled: false,
         require2fa: false,
         hasInitialConsolidationRun: false,
+        appTitle: 'Inventário Pro',
+        appLogo: '',
     });
     const [termoEntregaTemplate, setTermoEntregaTemplate] = useState('');
     const [termoDevolucaoTemplate, setTermoDevolucaoTemplate] = useState('');
@@ -121,8 +124,9 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
     const [isCheckingGeminiKey, setIsCheckingGeminiKey] = useState(false);
     const [backupStatus, setBackupStatus] = useState<{ hasBackup: boolean; backupTimestamp?: string } | null>(null);
     const [isDatabaseActionLoading, setIsDatabaseActionLoading] = useState(false);
-    const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'security' | 'database' | 'integration' | 'import' | 'termo'>('general');
+    const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'personalization' | 'security' | 'database' | 'integration' | 'import' | 'termo'>('general');
     const [productNames, setProductNames] = useState<string[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
 
     const checkGeminiApiKeyStatus = async () => {
@@ -164,6 +168,8 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
                     is2faEnabled: data.is2faEnabled || false,
                     require2fa: data.require2fa || false,
                     hasInitialConsolidationRun: data.hasInitialConsolidationRun || false,
+                    appTitle: data.appTitle || 'Inventário Pro',
+                    appLogo: data.appLogo || '',
                 });
                 setTermoEntregaTemplate(data.termo_entrega_template || DEFAULT_ENTREGA_TEMPLATE);
                 setTermoDevolucaoTemplate(data.termo_devolucao_template || DEFAULT_DEVOLUCAO_TEMPLATE);
@@ -208,6 +214,22 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
         const { name, value } = e.target;
         setSettings(prev => ({ ...prev, [name]: value }));
     };
+
+    const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                alert("A imagem é muito grande. O limite é de 5MB.");
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setSettings(prev => ({ ...prev, appLogo: reader.result as string }));
+            };
+            reader.readAsDataURL(file);
+        }
+    };
     
     const handleSaveSettings = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -219,6 +241,12 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
                 termo_devolucao_template: termoDevolucaoTemplate,
             };
             await saveSettings(finalSettings as AppSettings, currentUser.username);
+            
+            // Update global app state if callback provided
+            if (onSettingsUpdate) {
+                onSettingsUpdate(finalSettings.appTitle, finalSettings.appLogo);
+            }
+            
             alert("Configurações salvas com sucesso!");
         } catch (error: any) {
             alert(`Falha ao salvar configurações: ${error.message}`);
@@ -349,6 +377,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
 
     const settingsTabs = [
         { id: 'general', label: 'Geral', icon: 'Settings' },
+        { id: 'personalization', label: 'Personalização', icon: 'Palette', adminOnly: true },
         { id: 'security', label: 'Segurança', icon: 'ShieldCheck' },
         { id: 'termo', label: 'Termos', icon: 'FileText', adminOnly: true },
         { id: 'integration', label: 'Integração Gemini', icon: 'Bot' },
@@ -375,7 +404,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
                         <button
                             key={tab.id}
                             onClick={() => setActiveSettingsTab(tab.id as any)}
-                            className={`flex items-center gap-2 px-4 py-2 -mb-px border-b-2 font-medium text-sm transition-colors duration-200 
+                            className={`flex items-center gap-2 px-4 py-2 -mb-px border-b-2 font-medium text-sm transition-colors duration-200 whitespace-nowrap 
                                 ${activeSettingsTab === tab.id
                                     ? 'border-brand-primary text-brand-primary dark:text-white'
                                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-dark-text-secondary dark:hover:text-gray-300'
@@ -518,6 +547,70 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
                                 )}
                             </div>
                         </div>
+                    )}
+                    
+                    {activeSettingsTab === 'personalization' && (
+                         <div className="space-y-8">
+                            <div className="p-6 bg-gray-50 dark:bg-dark-bg rounded-lg border dark:border-dark-border">
+                                <h3 className="text-lg font-bold text-brand-secondary dark:text-dark-text-primary mb-4 flex items-center gap-2">
+                                    <Icon name="Palette" size={20} />
+                                    Personalização da Marca (White Label)
+                                </h3>
+                                <p className="text-sm text-gray-600 dark:text-dark-text-secondary mb-6">
+                                    Altere o nome e o logotipo exibidos na barra lateral e na tela de login para personalizar o sistema para sua empresa.
+                                </p>
+                                
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-dark-text-secondary mb-2">Nome da Aplicação</label>
+                                        <input 
+                                            type="text" 
+                                            name="appTitle" 
+                                            value={settings.appTitle || ''} 
+                                            onChange={handleInputChange} 
+                                            className="w-full p-2 border dark:border-dark-border rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-dark-text-primary" 
+                                            placeholder="Ex: Inventário Pro"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">Exibido no topo da barra lateral e na tela de login.</p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-dark-text-secondary mb-2">Logotipo</label>
+                                        <div className="flex items-start gap-6">
+                                            <div className="relative w-24 h-24 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center overflow-hidden">
+                                                {settings.appLogo ? (
+                                                    <img src={settings.appLogo} alt="Logo Preview" className="w-full h-full object-contain" />
+                                                ) : (
+                                                    <Icon name="ShieldCheck" size={48} className="text-gray-300 dark:text-gray-500" />
+                                                )}
+                                            </div>
+                                            <div className="flex-1">
+                                                <input 
+                                                    type="file" 
+                                                    accept="image/png, image/jpeg, image/svg+xml"
+                                                    ref={fileInputRef}
+                                                    onChange={handleLogoUpload}
+                                                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-brand-primary file:text-white hover:file:bg-blue-600 cursor-pointer"
+                                                />
+                                                <p className="text-xs text-gray-500 mt-2">Formatos: PNG, JPG, SVG. Tamanho máx: 5MB.</p>
+                                                {settings.appLogo && (
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => {
+                                                            setSettings(prev => ({ ...prev, appLogo: '' }));
+                                                            if(fileInputRef.current) fileInputRef.current.value = '';
+                                                        }} 
+                                                        className="mt-2 text-sm text-red-600 hover:underline flex items-center gap-1"
+                                                    >
+                                                        <Icon name="Trash2" size={14} /> Remover Logo
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                         </div>
                     )}
     
                     {activeSettingsTab === 'security' && (
@@ -720,7 +813,7 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
                         </div>
                     )}
 
-                    {['general', 'security', 'termo'].includes(activeSettingsTab) && currentUser.role === UserRole.Admin && (
+                    {['general', 'personalization', 'security', 'termo'].includes(activeSettingsTab) && currentUser.role === UserRole.Admin && (
                         <div className="flex justify-end pt-4 border-t dark:border-dark-border">
                             <button type="submit" disabled={isSaving} className="bg-brand-primary text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2">
                                 <Icon name="Save" size={18} />

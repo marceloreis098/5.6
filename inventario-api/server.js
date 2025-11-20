@@ -19,8 +19,8 @@ const app = express();
 // and before body parsers to correctly handle pre-flight OPTIONS requests.
 app.use(cors());
 
-app.use(express.json({ limit: '10mb' })); // Increase limit for photo uploads
-app.use(express.urlencoded({ extended: true })); // Add this to parse form data from SAML IdP
+app.use(express.json({ limit: '50mb' })); // Increased limit for photo uploads (Base64 logos)
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 const PORT = process.env.API_PORT || 3001;
 const SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS || '10');
@@ -78,6 +78,19 @@ const ensureCriticalSchema = async (connection) => {
         }
     };
 
+    // Helper para modificar coluna se necessário (para aumentar tamanho do config_value)
+    const checkAndModifyColumn = async (tableName, columnName, columnDef) => {
+        try {
+             const [tableExists] = await connection.query(`SHOW TABLES LIKE '${tableName}'`);
+             if (tableExists.length === 0) return;
+             
+             // Simplesmente roda o ALTER, se já estiver correto o banco ignora ou faz rápido
+             await connection.query(`ALTER TABLE ${tableName} MODIFY COLUMN ${columnName} ${columnDef}`);
+        } catch (err) {
+             console.error(`Error modifying column ${columnName} in ${tableName}:`, err.message);
+        }
+    }
+
     // 1. Verificar Tabela LICENSES
     await checkAndAddColumn('licenses', 'empresa', 'VARCHAR(255) NULL');
     await checkAndAddColumn('licenses', 'observacoes', 'TEXT');
@@ -94,6 +107,9 @@ const ensureCriticalSchema = async (connection) => {
     // 3. Verificar Tabela USERS (Correção para erro de 2FA)
     await checkAndAddColumn('users', 'twoFASecret', 'VARCHAR(255) NULL');
     await checkAndAddColumn('users', 'is2FAEnabled', 'BOOLEAN DEFAULT FALSE');
+
+    // 4. Garantir que app_config suporte Base64 grande para logos
+    await checkAndModifyColumn('app_config', 'config_value', 'LONGTEXT');
 
     console.log("Critical schema check complete.");
 };
@@ -209,7 +225,7 @@ const runMigrations = async () => {
                 CREATE TABLE IF NOT EXISTS app_config (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     config_key VARCHAR(255) NOT NULL UNIQUE,
-                    config_value TEXT
+                    config_value LONGTEXT
                 );`
             },
             {
@@ -288,6 +304,9 @@ const runMigrations = async () => {
             { id: 27, sql: "ALTER TABLE licenses ADD COLUMN empresa VARCHAR(255) NULL;" },
             { // Migration 28: Remove UNIQUE constraint from serial to allow multiple records with same serial (diff users)
                 id: 28, sql: "ALTER TABLE equipment DROP INDEX serial;" 
+            },
+            { // Migration 29: Ensure config_value is LONGTEXT for app_config to store logos
+                id: 29, sql: "ALTER TABLE app_config MODIFY COLUMN config_value LONGTEXT;"
             }
         ];
         
